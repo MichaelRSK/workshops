@@ -1,44 +1,41 @@
 import asyncio
 
-from database.mongodb import client, initialize_database
-from models.transaction import Transaction
-from models.user import User
-from utils.security import hash_password
+from dotenv import load_dotenv
+
+from database.mongodb import close_database, initialize_database
+from models.notice import Notice
+
+
+SEED_NOTICES = [
+    {
+        "title": "Welcome",
+        "message": "Welcome to the Notice Board application.",
+    },
+    {
+        "title": "Workshop Reminder",
+        "message": "Remember to review your partner's pull request.",
+    },
+    {
+        "title": "AWS Deployment",
+        "message": "Complete the deployment tiers before submitting.",
+    },
+]
 
 
 async def seed_database() -> None:
+    load_dotenv()
+
     await initialize_database()
 
-    # Optional: clear existing development data first
-    await Transaction.find_all().delete()
-    await User.find_all().delete()
+    try:
+        await Notice.delete_all()
 
-    users = [
-        User(
-            name="John Smith",
-            email="john@example.com",
-            password_hash=hash_password("101010"),
-            balance=1000.00,
-        ),
-        User(
-            name="Jane Doe",
-            email="jane@example.com",
-            password_hash=hash_password("101010"),
-            balance=500.00,
-        ),
-        User(
-            name="Casstiel Pi",
-            email="casstiel@example.com",
-            password_hash=hash_password("101010"),
-            balance=1000.00,
-        ),
-    ]
+        notices = [Notice(**notice) for notice in SEED_NOTICES]
+        await Notice.insert_many(notices)
 
-    await User.insert_many(users)
-
-    print(f"Seeded {len(users)} users.")
-
-    await client.close()
+        print(f"Inserted {len(notices)} notices.")
+    finally:
+        await close_database()
 
 
 if __name__ == "__main__":

@@ -1,40 +1,32 @@
 import os
 
 from beanie import init_beanie
-from dotenv import load_dotenv
-from pymongo import AsyncMongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from models.transaction import Transaction
-from models.user import User
+from models.notice import Notice
 
 
-load_dotenv()
-
-MONGODB_URL = os.getenv("MONGODB_URL")
-DATABASE_NAME = os.getenv("DATABASE_NAME")
-
-
-if not MONGODB_URL:
-    raise RuntimeError(
-        "MONGODB_URL is not configured"
-    )
-
-if not DATABASE_NAME:
-    raise RuntimeError(
-        "DATABASE_NAME is not configured"
-    )
-
-
-client = AsyncMongoClient(MONGODB_URL)
+client: AsyncIOMotorClient | None = None
 
 
 async def initialize_database() -> None:
-    database = client[DATABASE_NAME]
+    global client
+
+    mongodb_uri = os.getenv("MONGODB_URI")
+
+    if not mongodb_uri:
+        raise RuntimeError("MONGODB_URI environment variable is not set")
+
+    client = AsyncIOMotorClient(mongodb_uri)
+
+    database = client.get_database("notice_board_db")
 
     await init_beanie(
         database=database,
-        document_models=[
-            User,
-            Transaction,
-        ],
+        document_models=[Notice],
     )
+
+
+async def close_database() -> None:
+    if client is not None:
+        client.close()
