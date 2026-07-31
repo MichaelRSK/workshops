@@ -2,12 +2,12 @@ import json
 import os
 from pymongo import MongoClient
 
-MONGO_HOST = os.environ["MONGO_HOST"]
-MONGO_PORT = int(os.environ.get("MONGO_PORT", 27017))
+MONGO_URI = os.environ["MONGO_URI"]
+PORT = int(os.environ.get("PORT", 27017))
 
 
 def get_collection():
-    client = MongoClient(host=MONGO_HOST, port=MONGO_PORT, serverSelectionTimeoutMS=5000)
+    client = MongoClient(host=MONGO_URI, port=PORT, serverSelectionTimeoutMS=5000)
     return client["noticeboard"]["notices"]
 
 

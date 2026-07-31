@@ -80,8 +80,8 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      MONGO_HOST = var.mongo_host
-      MONGO_PORT = "27017"
+      MONGO_URI = var.mongo_host
+      PORT      = "27017"
     }
   }
 }
