@@ -1,6 +1,6 @@
-output "website_url" {
-  description = "S3 static website URL — open this in your browser"
-  value       = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
+output "cloudfront_url" {
+  description = "CloudFront frontend URL — open this in your browser"
+  value       = "https://${aws_cloudfront_distribution.cdn.domain_name}"
 }
 
 output "api_url" {
@@ -16,4 +16,9 @@ output "s3_bucket" {
 output "lambda_function_name" {
   description = "Lambda function name"
   value       = aws_lambda_function.api.function_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID — used to invalidate cache after deploy"
+  value       = aws_cloudfront_distribution.cdn.id
 }
