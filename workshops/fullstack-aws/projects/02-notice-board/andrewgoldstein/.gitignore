@@ -1,0 +1,122 @@
+node_modules/
+dist/
+*.zip
+backend/_build/
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+.env
+
+# ==========================================
+# Operating System & IDE Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor configs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# Environment & Secret Files (CRITICAL)
+.env
+.env.*
+!.env.example
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# ==========================================
+# Python & FastAPI Backend
+# ==========================================
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Coverage (pytest, coverage)
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.nox/
+.hypothesis/
+.cache
+
+# FastAPI / Database temporary files (e.g. SQLite / local DBs)
+*.db
+*.sqlite3
+*.sqlite
+
+# MyPy / Python Typing cache
+.mypy_cache/
+.dmypy.cache/
+dmypy.json
+.pyre/
+.ruff_cache/
+
+
+# ==========================================
+# Vite + React + TypeScript Frontend
+# ==========================================
+# Node modules
+node_modules/
+jspm_packages/
+
+# Production build output
+dist/
+dist-ssr/
+out/
+
+# Vite temporary files
+.vite/
+
+# TypeScript build caches
+*.tsbuildinfo
+
+# Package manager lock files (Optional - uncomment if you want to ignore locks)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
