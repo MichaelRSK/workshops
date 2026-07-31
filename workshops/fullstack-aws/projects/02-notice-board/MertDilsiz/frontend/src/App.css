@@ -1,0 +1,106 @@
+.app-shell {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 32px 16px;
+  box-sizing: border-box;
+}
+
+.panel {
+  width: 100%;
+  max-width: 780px;
+  border: 1px solid #d5d9e1;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.subtitle {
+  margin: 8px 0 20px;
+  color: #5c667a;
+}
+
+.notice-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.notice-form label {
+  font-weight: 600;
+  color: #111827;
+}
+
+.notice-form input,
+.notice-form textarea {
+  width: 100%;
+  border: 1px solid #cdd3de;
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.notice-form button,
+.delete-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.notice-form button {
+  justify-self: start;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.notice-list {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.notice-item {
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.notice-name {
+  margin: 0 0 6px;
+  font-weight: 700;
+  color: #1b2435;
+}
+
+.notice-message {
+  margin: 0;
+  color: #41506b;
+}
+
+.delete-btn {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.error {
+  color: #b91c1c;
+  margin: 8px 0;
+}
+
+@media (max-width: 600px) {
+  .panel {
+    padding: 16px;
+  }
+
+  .notice-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
