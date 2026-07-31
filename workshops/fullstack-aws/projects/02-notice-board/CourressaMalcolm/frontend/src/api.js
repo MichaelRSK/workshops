@@ -10,7 +10,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
  * @returns {Promise<{ success: boolean, count: number, data: Notice[] }>}
  */
 export async function fetchNotices() {
-  const res = await fetch(`${API_BASE}/api/v1/notice`);
+  const res = await fetch(`${API_BASE}/api/v1/notices`);
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
