@@ -1,6 +1,0 @@
-# Olist CSVs are large + restrictively licensed — don't commit.
-/data/raw/*.csv
-/data/processed/*.csv
-
-# Local config — contains your PAT.
-.env

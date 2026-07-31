@@ -1,0 +1,27 @@
+{
+  "name": "workshops-courressamalcolm",
+  "version": "1.0.0",
+  "description": "Hands-on workshop labs built by [BeCloudReady](https://becloudready.com/workshops) for engineering and analytics teams. Each lab is self-contained, with pre-scoped IAM permissions, step-by-step walkthroughs, and sample data included. Drop into a workshop or run independently.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Courressa/workshops-CourressaMalcolm.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Courressa/workshops-CourressaMalcolm/issues"
+  },
+  "homepage": "https://github.com/Courressa/workshops-CourressaMalcolm#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
