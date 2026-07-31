@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "nodemon workshops/fullstack-aws/projects/02-notice-board/backend/app.js "
-
+    "server": "nodemon workshops/fullstack-aws/projects/02-notice-board/backend/app.js",
+    "dev": "npm run dev --prefix workshops/fullstack-aws/projects/02-notice-board/frontend"
   },
   "repository": {
     "type": "git",
