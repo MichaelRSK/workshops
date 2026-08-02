@@ -109,22 +109,48 @@ resource "aws_lambda_permission" "lambda_permission" {
   source_arn = "${aws_apigatewayv2_api.api_gateway.execution_arn}/*/*"
 }
 
+# aws_s3_bucket (bucket = local.name)
+resource "aws_s3_bucket" "bucket" {
+  bucket = local.name
+}
 
-
-
-
-
-
-# TODO: aws_s3_bucket (bucket = local.name)
-
-# TODO: aws_s3_bucket_public_access_block
+# aws_s3_bucket_public_access_block
 #   - all block_* = false (Tier 1) -> flip to true in Tier 3 once CloudFront is added
+resource "aws_s3_bucket_public_access_block" "bucket_public_access_block" {
+  bucket = aws_s3_bucket.bucket.id
+  block_public_acls = false
+  block_public_policy = false
+  ignore_public_acls = false
+  restrict_public_buckets = false
+}
 
-# TODO: aws_s3_bucket_policy
+# aws_s3_bucket_policy
 #   - Principal "*", Action "s3:GetObject" (Tier 1) -> replace with CloudFront OAC policy in Tier 3
+resource "aws_s3_bucket_policy" "bucket_policy" {
+  bucket = aws_s3_bucket.bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.bucket.arn}/*"
+      }
+    ]
+  })
+  
+  depends_on = [aws_s3_bucket_public_access_block.bucket_public_access_block]
+}
 
-# TODO: aws_s3_bucket_website_configuration
+# aws_s3_bucket_website_configuration
 #   - index_document { suffix = "index.html" }
+resource "aws_s3_bucket_website_configuration" "bucket_website_configuration" {
+  bucket = aws_s3_bucket.bucket.id
+  index_document {
+    suffix = "index.html"
+  }
+}
 
 # ---------------------------------------------------------------------------
 # TIER 3 TODOs (add once Tier 1 is verified working)
