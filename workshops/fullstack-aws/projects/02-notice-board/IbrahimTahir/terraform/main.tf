@@ -19,28 +19,101 @@ locals {
 # ---------------------------------------------------------------------------
 # TIER 1 TODOs
 # ---------------------------------------------------------------------------
+resource "aws_iam_role" "lambda_role" {
+  name = "${local.name}-lambda-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {Service = "lambda.amazonaws.com"}
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
 
-# TODO: aws_lambda_function
-#   - filename = "${path.module}/../backend/lambda.zip"
-#   - handler  = "lambda_function.lambda_handler"
-#   - runtime  = "python3.12"
-#   - environment.variables = { MONGO_HOST = var.mongo_host, MONGO_PORT = var.mongo_port }
-#   - needs an aws_iam_role with the AWSLambdaBasicExecutionRole policy attached
+resource "aws_iam_role_policy_attachment" "policy" {
+  role = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
 
-# TODO: aws_apigatewayv2_api (HTTP API)
-#   - protocol_type = "HTTP"
 
-# TODO: aws_apigatewayv2_integration
-#   - integration_type = "AWS_PROXY", connects the api to the lambda
 
-# TODO: aws_apigatewayv2_route x3
+resource "aws_lambda_function" "lambda_function"{
+  filename = "${path.module}/../backend/lambda.zip"
+  handler  = "lambda_function.lambda_handler"
+  runtime  = "python3.12"
+  environment { 
+    variables = { 
+      MONGO_HOST = var.mongo_host,
+      MONGO_PORT = var.mongo_port
+      }
+  }
+  role = aws_iam_role.lambda_role.arn  
+  function_name = "${local.name}-lambda-function"
+}
+
+resource "aws_apigatewayv2_api" "api_gateway" {
+  protocol_type = "HTTP"
+  name = "${local.name}-apigateway"
+}
+
+resource "aws_apigatewayv2_integration" "api_gateway_integration"{
+  #   - integration_type = "AWS_PROXY", connects the api to the lambda
+  integration_type = "AWS_PROXY"
+  integration_uri = aws_lambda_function.lambda_function.invoke_arn
+  api_id = aws_apigatewayv2_api.api_gateway.id
+  payload_format_version = "2.0"
+  integration_method = "POST"
+}
+
+
+#  "aws_apigatewayv2_route x3
 #   - "GET /notices", "POST /notices", "DELETE /notices/{id}"
 
-# TODO: aws_apigatewayv2_stage
-#   - name = "$default", auto_deploy = true
+resource "aws_apigatewayv2_route" "get_notices" {
+  api_id = aws_apigatewayv2_api.api_gateway.id
+  route_key = "GET /notices"
+  target = "integrations/${aws_apigatewayv2_integration.api_gateway_integration.id}"
+}
 
-# TODO: aws_lambda_permission
+resource "aws_apigatewayv2_route" "post_notices" {
+  api_id = aws_apigatewayv2_api.api_gateway.id
+  route_key = "POST /notices"
+  target = "integrations/${aws_apigatewayv2_integration.api_gateway_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "delete_notice" {
+  api_id = aws_apigatewayv2_api.api_gateway.id
+  route_key = "DELETE /notices/{id}"
+  target = "integrations/${aws_apigatewayv2_integration.api_gateway_integration.id}"
+}
+
+resource "aws_apigatewayv2_stage" "stage" {
+  #   - name = "$default", auto_deploy = true
+  name= "$default"
+  auto_deploy = true
+  api_id = aws_apigatewayv2_api.api_gateway.id
+
+}
+
+
+# aws_lambda_permission - who is allowed to invoke your Lambda in the first place
 #   - allows apigateway.amazonaws.com to invoke the lambda function
+resource "aws_lambda_permission" "lambda_permission" {
+  statement_id = "AllowAPIGatewayInvoke"
+  action = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_function.function_name
+  principal = "apigateway.amazonaws.com"
+  source_arn = "${aws_apigatewayv2_api.api_gateway.execution_arn}/*/*"
+}
+
+
+
+
+
+
 
 # TODO: aws_s3_bucket (bucket = local.name)
 
