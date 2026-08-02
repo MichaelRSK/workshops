@@ -13,9 +13,11 @@ The agent (text → SQL) lives in a separate repo. This repo only sets up the da
 ```
 data/
   raw/                # input CSVs (gitignored — bring your own)
-  processed/          # cleaned CSVs written by load_oltp.py
-  sql/                # OLTP + OLAP DDL
-  pipelines/          # load_oltp.py, build_olap.py
+  processed/          # cleaned CSVs written by load_oltp.py + the two
+                      # generator scripts (also gitignored)
+  sql/                # OLTP + OLAP DDL — 11-table star schema
+  pipelines/          # build_dim_date.py, build_dim_marketing_channel.py,
+                      # load_oltp.py, build_olap.py
   metadata/           # one JSON per table (LLM-facing schema docs)
 databricks/           # catalog/schema/volume setup + cluster notes
 vllm/                 # Dockerfile, run.sh, config.yaml, deploy notes
@@ -92,7 +94,7 @@ The geolocation, reviews, and sellers CSVs aren't needed. `data/raw/*.csv` is gi
 The raw CSVs are not committed. Download them from Kaggle into [data/raw/](data/raw/) before continuing — see the [Dataset](#dataset) section above for the exact `kaggle datasets download` command. Verify:
 
 ```bash
-ls data/raw/olist_*.csv | wc -l    # should be 9 if you used --unzip; the pipeline only needs 5
+ls data/raw/*.csv | wc -l    # should be 9 — the 11-table schema uses all of them, none are optional anymore
 ```
 
 ### 1. Create the Lakebase instance
@@ -107,7 +109,7 @@ Once `Available`, click the instance and copy the **hostname** from Connection d
 
 ### 2. Set environment variables
 
-The Postgres **username is your Databricks email** (URL-encode the `@` as `%40`). The Postgres **password is your Databricks PAT** — Lakebase accepts a PAT as the auth credential, no separate token generation needed.
+The Postgres **username is your Databricks email** (URL-encode the `@` as `%40`). The Postgres **password is your Databricks PAT** — Lakebase accepts a PAT as the auth credential, no separate token generation needed. Leave the password out of `LAKEBASE_URL` itself — `load_oltp.py` prompts for it interactively (see step 3).
 
 ```bash
 export LAKEBASE_HOST="ep-<your-instance-id>.database.<region>.cloud.databricks.com"
@@ -115,6 +117,8 @@ export DATABRICKS_HOST="https://dbc-XXXXXXXX-XXXX.cloud.databricks.com"
 export DATABRICKS_TOKEN="dapiXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Lakebase ships with a default database `databricks_postgres`. We use it as-is.
+# psql still needs PGPASSWORD (it has no interactive-prompt fallback the way
+# load_oltp.py does) — the Python loader in step 3 will prompt you instead.
 export PGPASSWORD="$DATABRICKS_TOKEN"
 export LAKEBASE_URL="postgresql://your.email%40example.com@${LAKEBASE_HOST}/databricks_postgres?sslmode=require"
 
@@ -129,19 +133,41 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r data/pipelines/requirements.txt
 
 psql "$LAKEBASE_URL" -f data/sql/oltp_schema.sql
-psql "$LAKEBASE_URL" -c "\dt"                # verify: 5 tables in public schema
+psql "$LAKEBASE_URL" -c "\dt"                # verify: 12 tables in public schema
+                                              #   (3 facts + 7 dims + 1 bridge)
 
-python data/pipelines/load_oltp.py            # ~30s; writes to Postgres + data/processed/
+# The two synthetic/derived dimensions first — dim_date has no data
+# dependency, dim_marketing_channel needs olist_orders_dataset.csv already
+# in data/raw/ (it assigns a channel to every real order_id).
+python data/pipelines/build_dim_date.py
+python data/pipelines/build_dim_marketing_channel.py
+
+python data/pipelines/load_oltp.py
+# Postgres password for your.email@ep-<...>...cloud.databricks.com:
+#   [paste your Databricks PAT — same value as DATABRICKS_TOKEN/PGPASSWORD
+#   above — not echoed to the terminal]
+# ~30-45s; writes to Postgres + data/processed/
 
 psql "$LAKEBASE_URL" -c "
-  SELECT 'customers'   t, COUNT(*) FROM customers   UNION ALL
-  SELECT 'orders'      , COUNT(*) FROM orders       UNION ALL
-  SELECT 'order_items' , COUNT(*) FROM order_items  UNION ALL
-  SELECT 'products'    , COUNT(*) FROM products     UNION ALL
-  SELECT 'payments'    , COUNT(*) FROM payments;"
+  SELECT 'customers'             t, COUNT(*) FROM customers             UNION ALL
+  SELECT 'sellers'                , COUNT(*) FROM sellers                UNION ALL
+  SELECT 'geolocation'            , COUNT(*) FROM geolocation            UNION ALL
+  SELECT 'dim_category'           , COUNT(*) FROM dim_category           UNION ALL
+  SELECT 'products'               , COUNT(*) FROM products               UNION ALL
+  SELECT 'dim_date'               , COUNT(*) FROM dim_date               UNION ALL
+  SELECT 'dim_marketing_channel'  , COUNT(*) FROM dim_marketing_channel  UNION ALL
+  SELECT 'orders'                 , COUNT(*) FROM orders                 UNION ALL
+  SELECT 'order_items'            , COUNT(*) FROM order_items            UNION ALL
+  SELECT 'payments'               , COUNT(*) FROM payments               UNION ALL
+  SELECT 'reviews'                , COUNT(*) FROM reviews                UNION ALL
+  SELECT 'order_channel'          , COUNT(*) FROM order_channel;"
 ```
 
-Expect ~99K customers, ~99K orders, ~112K line items, ~33K products, ~104K payments.
+`dim_date` is always exactly 1,826 rows (2015-01-01 .. 2019-12-31, a fixed calendar range, not data-dependent). `dim_marketing_channel` is always exactly 6. Everything else scales with whatever Kaggle snapshot you downloaded — expect roughly 99K customers, 99K orders, 112K line items, 33K products (a few hundred fewer once nulled against `dim_category`), 104K payments, ~99K reviews, ~3K sellers, and one `order_channel` row per order. Treat these as ballpark, not exact — record your own run's actual numbers here once you have them, that's more trustworthy than a number carried over from someone else's dataset snapshot.
+
+**If `load_oltp.py` fails with `FileNotFoundError`**, it's almost always one of: the Kaggle download didn't unzip into `data/raw/` (`ls data/raw/*.csv` should show 9), or `load_oltp.py` ran before the two generator scripts above.
+
+**If it fails with `invalid input syntax for type integer: "63.0"` on `products`**, that means you're on an older copy of `load_oltp.py` — `clean_products()` needs to cast `category_id` to pandas' nullable `Int64` type before writing the CSV, otherwise any product with an unmatched/blank category silently upcasts the whole column to float and Postgres rejects the `"63.0"`-style string. Fixed in the current version; pull latest if you hit this.
 
 ### 4. Bootstrap Unity Catalog
 
@@ -246,3 +272,7 @@ See [data/metadata/](data/metadata/) for per-table descriptions the agent's prom
 - **Default database is `databricks_postgres`.** Unless you explicitly `CREATE DATABASE olist;` first and re-export `LAKEBASE_URL` to point at it, your tables land in `databricks_postgres.public`. The federation foreign catalog must point at whichever DB you actually used.
 - **PostgreSQL connection options are limited.** `CREATE CONNECTION ... TYPE postgresql` only supports `host`, `port`, `user`, `password`, `trustServerCertificate`. The `database` option goes on the `FOREIGN CATALOG`, not the connection. OAuth options (`auth_type`, `oauth_*`) are not supported for the postgresql connector — use a PAT in a secret.
 - **Email-as-username must be URL-encoded** in `LAKEBASE_URL` (replace `@` with `%40`). Plain Postgres clients don't tolerate the literal `@` in the userinfo segment of the URL.
+- **`load_oltp.py` prompts for the Postgres password instead of reading it from `LAKEBASE_URL`.** Keeps the PAT out of shell history and the env var. If you do put a password in `LAKEBASE_URL` anyway (CI, secrets manager), it's used as-is and the prompt is skipped — `resolve_db_url()` only prompts when the URL has none.
+- **`category_id` needs pandas' nullable `Int64` dtype, not plain `int`.** The merge in `clean_products()` produces `NaN` for any product whose category didn't match, which silently upcasts the whole column to float — Postgres then rejects `COPY`'s `"63.0"`-style text for an `INTEGER` column. `Int64` (capital I) keeps real values as clean integers and turns the missing ones into a proper empty/`NULL` field instead.
+- **Load order must follow the FK graph, dimensions before facts.** `copy_to_table()` does `TRUNCATE ... CASCADE` per table in a loop — truncating a dimension after a fact that references it has already loaded wipes that fact back out. `dim_date` and `dim_marketing_channel` load before `orders`; `dim_category` before `products`; `customers`/`sellers` before `orders`/`order_items`.
+- **`dim_marketing_channel` and the `order_channel` bridge are synthetic**, Olist's raw data has no acquisition-channel field. `build_dim_marketing_channel.py` assigns one to every real order via a seeded (deterministic) weighted random draw, so it's reproducible across every re-run without shipping a large join file around.
