@@ -19,26 +19,6 @@ locals {
 # ---------------------------------------------------------------------------
 # TIER 1 TODOs
 # ---------------------------------------------------------------------------
-resource "aws_iam_role" "lambda_role" {
-  name = "${local.name}-lambda-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {Service = "lambda.amazonaws.com"}
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "policy" {
-  role = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-
 
 resource "aws_lambda_function" "lambda_function"{
   filename = "${path.module}/../backend/lambda.zip"
@@ -50,7 +30,7 @@ resource "aws_lambda_function" "lambda_function"{
       MONGO_PORT = var.mongo_port
       }
   }
-  role = aws_iam_role.lambda_role.arn  
+  role = "arn:aws:iam::279249498881:role/quicklabs-fullstack-shared-lambda-exec" 
   function_name = "${local.name}-lambda-function"
 }
 
@@ -89,6 +69,20 @@ resource "aws_apigatewayv2_route" "delete_notice" {
   route_key = "DELETE /notices/{id}"
   target = "integrations/${aws_apigatewayv2_integration.api_gateway_integration.id}"
 }
+
+resource "aws_apigatewayv2_route" "post_options_notices" {
+  api_id = aws_apigatewayv2_api.api_gateway.id
+  route_key = "OPTIONS /notices"
+  target = "integrations/${aws_apigatewayv2_integration.api_gateway_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "delete_options_notice" {
+  api_id = aws_apigatewayv2_api.api_gateway.id
+  route_key = "OPTIONS /notices/{id}"
+  target = "integrations/${aws_apigatewayv2_integration.api_gateway_integration.id}"
+}
+
+
 
 resource "aws_apigatewayv2_stage" "stage" {
   #   - name = "$default", auto_deploy = true
