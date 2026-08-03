@@ -3,9 +3,14 @@
 # TODO(step 5): output "s3_bucket"        — bucket name (used to `aws s3 sync`)
 # TODO(step 5): output "lambda_function_name" — used later in Tier 2's GitHub Actions workflow
 
-output "s3_website_url" {
+output "cloudfront_url" {
   description = "Frontend URL — open this in your browser"
-  value       = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
+  value       = "https://${aws_cloudfront_distribution.cdn.domain_name}"
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID — used to invalidate cache after a frontend deploy"
+  value       = aws_cloudfront_distribution.cdn.id
 }
 
 output "api_url" {
