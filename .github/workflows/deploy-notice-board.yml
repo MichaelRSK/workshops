@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-notice-board.yml'
       - 'workshops/fullstack-aws/projects/02-notice-board/**'
+  workflow_dispatch: {}
 
 env:
   PROJECT_DIR: workshops/fullstack-aws/projects/02-notice-board
