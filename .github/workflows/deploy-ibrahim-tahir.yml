@@ -1,8 +1,10 @@
 name: Deploy Notice Board
 
+
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   deploy:
