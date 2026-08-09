@@ -1,6 +1,0 @@
-fastapi
-uvicorn[standard]
-beanie
-motor
-python-dotenv
-mangum
