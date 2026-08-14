@@ -132,8 +132,11 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      MONGO_HOST = var.mongo_host
-      MONGO_PORT = "27017"
+      PG_HOST     = var.postgres_host
+      PG_PORT     = var.postgres_port
+      PG_DATABASE = var.postgres_db
+      PG_USER     = var.postgres_user
+      PG_PASSWORD = var.postgres_password
     }
   }
 }

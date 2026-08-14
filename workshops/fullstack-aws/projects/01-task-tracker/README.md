@@ -1,6 +1,6 @@
 # Task Tracker: Capstone Project
 
-A full-stack serverless task management app built with React, Python Lambda, MongoDB, and deployed on AWS.
+A full-stack serverless task management app built with React, Python Lambda, PostgreSQL, and deployed on AWS.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ The app is split into two independent flows:
       └─────────────────┘                             │
                                                       ▼
                                            ┌─────────────────────┐
-                                           │   MongoDB on EC2    │
+                                           │  PostgreSQL on EC2  │
                                            │   (task data store) │
                                            └─────────────────────┘
 ```
@@ -40,7 +40,7 @@ The app is split into two independent flows:
 |-------|-----------|
 | Frontend | React.js + Material UI + React Responsive |
 | Backend | Python (AWS Lambda) |
-| Database | MongoDB on EC2 |
+| Database | PostgreSQL on EC2 |
 | Infrastructure | Terraform |
 | Hosting | S3 + CloudFront + Lambda + API Gateway |
 | Deployment | Shell Script |
@@ -89,7 +89,7 @@ task-tracker/
 - Python 3.12+
 - Terraform installed
 - AWS CLI configured (`aws configure`)
-- MongoDB running on EC2 (from Lab: Lambda MongoDB EC2)
+- PostgreSQL running on EC2 (from Lab: Lambda PostgreSQL EC2)
 
 ### Step 1: Build the Lambda package
 
@@ -109,7 +109,7 @@ terraform init
 terraform apply
 ```
 
-Terraform will prompt for `student_name`, `mongo_host`, `created_date` (dd-mmm-yyyy, e.g. `12-Jul-2026`), and `lambda_role_arn`. Get `lambda_role_arn` from your instructor: it's the shared Lambda execution role for your cohort; you don't create your own IAM role.
+Terraform will prompt for `student_name`, `postgres_host`, `postgres_user`, `postgres_password`, `created_date` (dd-mmm-yyyy, e.g. `12-Jul-2026`), and `lambda_role_arn`. Get `lambda_role_arn` from your instructor: it's the shared Lambda execution role for your cohort; you don't create your own IAM role. `postgres_port` (default `5432`) and `postgres_db` (default `tasktracker`) have defaults you can override if needed.
 
 Copy the outputs: you will need them in the next steps:
 
@@ -163,5 +163,10 @@ Set these in the Lambda console under **Configuration → Environment variables*
 
 | Key | Value |
 |-----|-------|
-| `MONGO_HOST` | EC2 public IP |
-| `MONGO_PORT` | `27017` |
+| `PG_HOST` | EC2 public IP |
+| `PG_PORT` | `5432` |
+| `PG_DATABASE` | `tasktracker` |
+| `PG_USER` | PostgreSQL username |
+| `PG_PASSWORD` | PostgreSQL password |
+
+The Lambda creates the `tasks` table automatically on first invocation if it doesn't already exist.

@@ -16,8 +16,28 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
-variable "mongo_host" {
-  description = "EC2 public IP running MongoDB"
+variable "postgres_host" {
+  description = "EC2 public IP (or RDS endpoint) running PostgreSQL"
+}
+
+variable "postgres_port" {
+  description = "PostgreSQL port"
+  default     = "5432"
+}
+
+variable "postgres_db" {
+  description = "PostgreSQL database name"
+  default     = "tasktracker"
+}
+
+variable "postgres_user" {
+  description = "PostgreSQL username"
+}
+
+variable "postgres_password" {
+  description = "PostgreSQL password"
+  type        = string
+  sensitive   = true
 }
 
 variable "created_date" {
