@@ -29,7 +29,7 @@ User's Browser
       │
       ├── Page Load ──────────────▶ Frontend Hosting (you decide where)
       │
-      └── API Calls ──────────────▶ API Gateway ──▶ Lambda ──▶ MongoDB on EC2
+      └── API Calls ──────────────▶ API Gateway ──▶ Lambda ──▶ PostgreSQL on EC2
 ```
 
 ---
@@ -41,7 +41,7 @@ Make sure you have:
 - [ ] Terraform installed
 - [ ] Node.js 18+ installed
 - [ ] Python 3 installed
-- [ ] MongoDB running on EC2 (from Lab: Lambda MongoDB EC2)
+- [ ] PostgreSQL running on EC2 (from Lab: Lambda PostgreSQL EC2)
 - [ ] A GitHub account
 
 ---
@@ -68,7 +68,7 @@ Make sure you have:
 ### Acceptance Criteria
 
 - [ ] Opening the S3 website URL shows the Notice Board UI
-- [ ] Posting a notice saves it to MongoDB and appears on the page
+- [ ] Posting a notice saves it to PostgreSQL and appears on the page
 - [ ] Deleting a notice removes it from the list
 - [ ] All AWS resources are prefixed with `student-<your-name>`
 
@@ -188,7 +188,7 @@ Use the official AWS action:
 <summary>Hint: Update Lambda from workflow</summary>
 
 ```bash
-pip install pymongo -t backend/_build -q
+pip install -r backend/requirements.txt -t backend/_build -q
 cp backend/lambda_function.py backend/_build/
 cd backend/_build && zip -r ../lambda.zip .
 aws lambda update-function-code \
@@ -293,7 +293,7 @@ aws cloudfront create-invalidation \
 3. Add two `aws_cloudwatch_metric_alarm` resources (Lambda Errors, API Gateway 5xx).
 4. Add an `aws_cloudwatch_dashboard` resource with a `dashboard_body` JSON containing three widgets (Lambda, API Gateway, CloudFront).
 5. Run `terraform apply` and confirm: both alarms start in `OK` state, the dashboard renders, and access log lines appear in CloudWatch after you hit the API.
-6. Force a failure to verify alarms fire: edit the Lambda env var `MONGO_HOST` in the AWS console to an unreachable value, hit the API a few times from your browser, wait ~5 minutes. Refresh **CloudWatch → Alarms** (or run `aws cloudwatch describe-alarms --alarm-names <your-alarm>`): the alarm should be in `ALARM`. Revert `MONGO_HOST` when done.
+6. Force a failure to verify alarms fire: edit the Lambda env var `PG_HOST` in the AWS console to an unreachable value, hit the API a few times from your browser, wait ~5 minutes. Refresh **CloudWatch → Alarms** (or run `aws cloudwatch describe-alarms --alarm-names <your-alarm>`): the alarm should be in `ALARM`. Revert `PG_HOST` when done.
 7. Open **CloudWatch → Logs Insights**, paste each of the two queries from the hints, and click **Save** with names like `notice-board-5xx-recent` and `notice-board-lambda-p95`.
 
 ### Acceptance Criteria

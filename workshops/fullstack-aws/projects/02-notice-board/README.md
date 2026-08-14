@@ -1,6 +1,6 @@
 # Notice Board
 
-A full-stack notice board application: React frontend, Python Lambda backend, MongoDB database.
+A full-stack notice board application: React frontend, Python Lambda backend, PostgreSQL database.
 
 ## Read the Assignment
 
