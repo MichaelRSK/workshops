@@ -1,70 +1,114 @@
-// useState holds the refresh counter that ties the form and the list
-// together. useCallback keeps the handler identity stable between renders.
-import { useCallback, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
 import {
   AppBar,
   Box,
-  Container,
+  Button,
   CssBaseline,
   Toolbar,
   Typography,
 } from "@mui/material";
 
-import NoticeForm from "./components/NoticeForm";
-import NoticeList from "./components/NoticeList";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import LoginPage from "./pages/LoginPage";
+import NoticeBoardPage from "./pages/NoticeBoardPage";
+import SignupPage from "./pages/SignupPage";
 
-function App() {
-  // Bumped after every successful create or delete. NoticeList watches this
-  // number and refetches when it changes.
-  //
-  // A counter rather than a boolean, because two creates in a row have to
-  // register as two separate changes. A boolean flipped back and forth
-  // would work by accident and break the moment anything else touched it.
-  const [refreshKey, setRefreshKey] = useState(0);
+// The bar across the top, including the logout button.
+//
+// A separate component rather than markup inside App because it calls
+// useAuth and useNavigate, and both have to run inside the provider and the
+// router. Written inline in App it would sit outside them and throw.
+function Header() {
+  const { isAuthenticated, user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  // Uses the updater form, so it is always incrementing the current value
-  // rather than one captured when this render happened. That matters when a
-  // create and a delete finish at almost the same moment.
-  //
-  // useCallback keeps this the same function across renders, which means
-  // passing it down does not give NoticeList a new prop every time App
-  // re-renders.
-  const handleChanged = useCallback(() => {
-    setRefreshKey((previous) => previous + 1);
-  }, []);
+  const handleLogout = () => {
+    logout();
+
+    // AuthContext deliberately does not redirect, since it has no view of
+    // the router. Doing it here keeps the context reusable and puts the
+    // navigation next to the button that caused it.
+    //
+    // replace so the board does not stay in the history stack, where Back
+    // would return to a page the user has just signed out of.
+    navigate("/login", { replace: true });
+  };
 
   return (
-    // CssBaseline applies MUI's own resets, which is what makes the page
-    // use the theme's background and typography instead of the browser
-    // defaults. It has to be inside the app rather than in index.css so it
-    // stays in step with the theme.
-    <>
-      <CssBaseline />
+    <AppBar position="static">
+      <Toolbar>
+        {/* flexGrow pushes everything after it to the right hand end. */}
+        <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
+          Notice Board
+        </Typography>
 
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="h1">
-            Notice Board
-          </Typography>
-        </Toolbar>
-      </AppBar>
+        {/* The whole block is hidden while logged out, so the login and
+            signup pages show a plain header with no controls that would not
+            work. */}
+        {isAuthenticated && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Typography variant="body2">
+              Signed in as {user.username}
+            </Typography>
 
-      {/* maxWidth sm keeps the column narrow enough to read comfortably on
-          a wide monitor. The notices are short text, so a full width page
-          would stretch each one into a single long line. */}
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <NoticeForm onCreated={handleChanged} />
+            <Button color="inherit" onClick={handleLogout}>
+              Log out
+            </Button>
+          </Box>
+        )}
+      </Toolbar>
+    </AppBar>
+  );
+}
 
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Notices
-          </Typography>
+// The routes, split out for the same reason as Header: this calls nothing
+// itself, but keeping it beside Header makes it obvious that both live
+// inside the provider and the router set up below.
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
 
-          <NoticeList refreshKey={refreshKey} onDeleted={handleChanged} />
-        </Box>
-      </Container>
-    </>
+      {/* The board is the only protected route. ProtectedRoute sends a
+          logged out visitor to /login and remembers where they were headed,
+          so they land back here after signing in. */}
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <NoticeBoardPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Anything else goes to the board, which in turn bounces to /login if
+          nobody is signed in. Without this a typo in the address bar renders
+          a blank page with no explanation. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    // The nesting order matters. AuthProvider is inside BrowserRouter so
+    // that anything it renders can use router hooks, and both wrap the
+    // routes so every page can reach the auth state.
+    //
+    // CssBaseline applies MUI's own resets, which is what makes the page use
+    // the theme's background and typography instead of the browser defaults.
+    <BrowserRouter>
+      <AuthProvider>
+        <CssBaseline />
+
+        <Header />
+
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

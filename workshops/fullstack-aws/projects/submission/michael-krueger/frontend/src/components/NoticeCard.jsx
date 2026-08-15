@@ -13,6 +13,7 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 
 import { deleteNotice } from "../api/notices";
+import { useAuth } from "../context/AuthContext";
 
 // Turns the timestamp the backend sends into something readable.
 //
@@ -39,8 +40,28 @@ function formatCreatedAt(createdAt) {
 // App to refetch. As with the form, nothing is removed from the list here:
 // the refetch is what makes the screen agree with the database.
 function NoticeCard({ notice, onDeleted }) {
+  const { user } = useAuth();
+
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+
+  // Whether to show the delete button at all.
+  //
+  // user is null while logged out, so nobody sees a delete button on a board
+  // they are only reading. When signed in, it appears on their own notices
+  // and not on anybody else's.
+  //
+  // user.id is already a number: the token carries it as a string in the
+  // "sub" claim, because the JWT spec requires that, and userFromToken
+  // converts it. Without that conversion this comparison would be "1" === 1,
+  // which is false, and the button would be hidden on every notice
+  // including the user's own.
+  //
+  // This is presentation only and not a security control. Hiding a button
+  // stops nobody from calling the API directly, which is why the backend
+  // checks ownership again and answers 403. The point here is not to offer
+  // an action that is going to be refused.
+  const canDelete = user !== null && user.id === notice.user_id;
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -69,11 +90,16 @@ function NoticeCard({ notice, onDeleted }) {
   return (
     <Card variant="outlined">
       <CardContent>
+        {/* justifyContent and alignItems go through sx rather than being
+            passed as props. This version of MUI does not accept them as
+            Stack props any more: they fall through to the underlying div,
+            React warns that it does not recognise them, and the alignment
+            silently does not apply. direction and spacing are real Stack
+            props and stay where they are. */}
         <Stack
           direction="row"
-          justifyContent="space-between"
-          alignItems="flex-start"
           spacing={2}
+          sx={{ justifyContent: "space-between", alignItems: "flex-start" }}
         >
           <div>
             <Typography variant="subtitle1" fontWeight="bold">
@@ -92,21 +118,27 @@ function NoticeCard({ notice, onDeleted }) {
             </Typography>
           </div>
 
-          <Tooltip title="Delete this notice">
-            {/* The span is here because MUI's Tooltip needs a child that can
-                hold a ref and fire hover events, and a disabled button fires
-                neither. Without it the tooltip breaks once deleting starts. */}
-            <span>
-              <IconButton
-                aria-label={`Delete notice from ${notice.name}`}
-                onClick={handleDelete}
-                disabled={deleting}
-                size="small"
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          {/* Hidden rather than disabled on somebody else's notice. A
+              disabled button still says "this is an action you might have",
+              which is misleading when the answer will always be no. */}
+          {canDelete && (
+            <Tooltip title="Delete this notice">
+              {/* The span is here because MUI's Tooltip needs a child that
+                  can hold a ref and fire hover events, and a disabled button
+                  fires neither. Without it the tooltip breaks once deleting
+                  starts. */}
+              <span>
+                <IconButton
+                  aria-label={`Delete notice from ${notice.name}`}
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  size="small"
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
         </Stack>
 
         {error && (

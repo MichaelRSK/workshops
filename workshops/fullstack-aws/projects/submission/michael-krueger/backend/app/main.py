@@ -6,10 +6,10 @@ from fastapi import FastAPI
 # a CORS error even though the request reached the server and succeeded.
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import the controller that holds the /notices endpoints. The controller is
-# the top layer: it defines the routes and calls down into the service,
-# which is the only layer that talks to Supabase.
-from app.controllers import notice_controller
+# Import the controllers that hold the routes. A controller is the top
+# layer: it defines the routes and calls down into a service, which is the
+# only layer that talks to Supabase.
+from app.controllers import auth_controller, notice_controller
 
 # Create the FastAPI application.
 #
@@ -50,8 +50,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register the notice controller's router so its routes become part of the
-# app. The router carries its own /notices prefix, so nothing is added here.
+# Register each controller's router so its routes become part of the app.
+# Each router carries its own prefix, /auth and /notices, so nothing is
+# added here.
+app.include_router(auth_controller.router)
 app.include_router(notice_controller.router)
 
 

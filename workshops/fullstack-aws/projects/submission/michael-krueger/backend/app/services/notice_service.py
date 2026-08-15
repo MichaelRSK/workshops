@@ -14,10 +14,10 @@ TABLE = "notices"
 # Listed explicitly rather than using "*" so that adding a column to the
 # table later cannot start leaking it through the API. It also means the
 # database sends back only what is actually used.
-COLUMNS = "id, name, message, created_at"
+COLUMNS = "id, user_id, name, message, created_at"
 
 
-# This module is the only place in the app that talks to Supabase.
+# This module is the only place in the app that talks to the notices table.
 #
 # Every function takes the client as its first argument rather than reaching
 # for get_client() itself. The controller injects it with Depends, which
@@ -29,6 +29,27 @@ COLUMNS = "id, name, message, created_at"
 # found" means 404, which is what keeps the HTTP concerns in one layer and
 # makes these functions reusable from somewhere that is not a web request,
 # such as a scheduled cleanup job.
+
+
+# Raised when a signed-in user tries to delete a notice somebody else posted.
+#
+# A named exception rather than a bool, because "you may not do that" and
+# "there is no such notice" are different answers and the controller has to
+# tell them apart to pick between 403 and 404. Returning False for both would
+# collapse them into one.
+#
+# Deliberately not Python's built in PermissionError, which is a subclass of
+# OSError and means a filesystem or process permission was refused. Reusing
+# it here would make an ownership failure indistinguishable from a genuine
+# operating system error in any except block further up.
+#
+# This is the layer that enforces ownership, and since the backend now holds
+# the service_role key it is the only layer that does. Row level security is
+# bypassed by that key, so the database will happily delete anybody's row if
+# asked. The check below is the whole protection, not a convenience on top of
+# a policy.
+class NoticeOwnershipError(Exception):
+    pass
 
 
 # Returns every notice, newest first.
@@ -93,9 +114,13 @@ def get_notice(client: Client, notice_id: int):
 # what status code a blank name deserves, it just refuses to store one. The
 # controller catches this and answers 422.
 #
-# Returns None if the insert wrote nothing, which on Supabase almost always
-# means an RLS policy refused it rather than that anything crashed.
-def create_notice(client: Client, notice: NoticeCreate):
+# Returns None if the insert wrote nothing.
+#
+# user_id is passed in by the controller, which takes it from the verified
+# token and never from the request body. That is the point: NoticeCreate has
+# no user_id field at all, so there is no way for a caller to post a notice
+# in somebody else's name, however the body is crafted.
+def create_notice(client: Client, notice: NoticeCreate, user_id: int):
     name = notice.name.strip()
     message = notice.message.strip()
 
@@ -106,7 +131,7 @@ def create_notice(client: Client, notice: NoticeCreate):
     # identity sequence and now(). See schema.sql.
     response = (
         client.table(TABLE)
-        .insert({"name": name, "message": message})
+        .insert({"name": name, "message": message, "user_id": user_id})
         .execute()
     )
 
@@ -116,23 +141,35 @@ def create_notice(client: Client, notice: NoticeCreate):
     return response.data[0]
 
 
-# Deletes one notice by id.
-# Returns True if it worked, False if there was no notice with that id.
+# Deletes one notice, if the user asking owns it.
 #
-# The existence check runs first so that "no such notice" is answered from a
-# cheap read, and so this function can tell the difference between a delete
-# that removed nothing because the id was wrong and one that removed nothing
-# because a policy blocked it. Both look identical from the delete call
-# alone.
+# Returns True if it was deleted, False if there was no notice with that id.
+# Raises NoticeOwnershipError if the notice exists but belongs to somebody
+# else, which the controller turns into a 403.
 #
-# It does cost a second round trip, and strictly speaking two callers
-# deleting the same notice at the same moment could both pass the check and
-# one would get a True for a row the other removed. Neither matters on a
-# notice board: the outcome the caller cares about, the notice being gone,
-# is true either way.
-def delete_notice(client: Client, notice_id: int):
-    if get_notice(client, notice_id) is None:
+# requesting_user_id comes from the verified token by way of the controller.
+# The read has to happen before the delete either way, so checking ownership
+# costs nothing extra: the row is already in hand.
+#
+# The order of the two checks matters and is deliberate. Missing is reported
+# as missing even to a user who does not own it, so 404 comes before any
+# ownership test. The alternative, answering 403 for a notice that does not
+# exist, would let anyone probe which ids are real by watching the status
+# code change.
+#
+# Two callers deleting the same notice at the same moment could both pass the
+# check and one would get a True for a row the other removed. That does not
+# matter on a notice board: the outcome the caller cares about, the notice
+# being gone, is true either way. Ownership is not subject to that race,
+# because a notice's user_id never changes after it is written.
+def delete_notice(client: Client, notice_id: int, requesting_user_id: int):
+    notice = get_notice(client, notice_id)
+
+    if notice is None:
         return False
+
+    if notice["user_id"] != requesting_user_id:
+        raise NoticeOwnershipError("You can only delete your own notices")
 
     client.table(TABLE).delete().eq("id", notice_id).execute()
 
