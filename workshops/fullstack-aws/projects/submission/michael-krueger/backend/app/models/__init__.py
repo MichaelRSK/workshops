@@ -6,14 +6,24 @@
 # or renaming it, then only changes these lines instead of every import
 # across the services and controllers.
 from app.models.notice import NoticeCreate, NoticeOut
+from app.models.reaction import (
+    REACTION_TYPES,
+    ReactionSummary,
+    ReactionToggle,
+    ReactionType,
+)
 from app.models.user import TokenResponse, UserCreate, UserLogin, UserOut
 
 # Names re-exported from this package. __all__ is what "from app.models
 # import *" would pick up, and it doubles as the list of what this package
 # is meant to expose.
 __all__ = [
+    "REACTION_TYPES",
     "NoticeCreate",
     "NoticeOut",
+    "ReactionSummary",
+    "ReactionToggle",
+    "ReactionType",
     "TokenResponse",
     "UserCreate",
     "UserLogin",

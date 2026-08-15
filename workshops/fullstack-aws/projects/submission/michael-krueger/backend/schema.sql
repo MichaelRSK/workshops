@@ -16,18 +16,29 @@
 --   The notices table itself already existed and held zero rows, which is
 --   what makes the migration below simple: there is nothing to backfill.
 --
+--   After the backend switched to the service_role key, a second gap showed
+--   up: GRANT and RLS are separate gates. RLS decides which rows a role
+--   sees (service_role bypasses it). GRANT decides whether the role may
+--   touch the table at all, and nothing grants that automatically for
+--   tables created by raw SQL. The earlier grants only ever named anon, so
+--   service_role had no table access until the GRANT block near the bottom
+--   was added.
+--
+--   Reactions were added after that: a notice_reactions table so users can
+--   like/heart/laugh a notice, independently toggleable per type.
+--
 -- SAFE TO RE-RUN
 --   Every statement is guarded, so running the file again changes nothing
---   and reports notices rather than errors. That matters because the usual
---   reason to open this file is that something did not work, and a script
---   you are afraid to re-run is not much help then.
+--   and reports notices rather than errors. GRANT is idempotent too, so
+--   re-running the whole file is always safe.
 --
 --   Re-running does NOT delete existing rows. There is no DROP TABLE here.
 --
 -- WHY THE RLS SECTION LOOKS DIFFERENT NOW
 --   The backend used to connect with the anon key, which row level security
 --   applies to. It now connects with the service_role key, which bypasses
---   RLS completely.
+--   RLS completely (assuming service_role has BYPASSRLS on this project,
+--   see the verification query at the bottom).
 --
 --   So the policies below no longer protect the API. What protects it is the
 --   JWT check in app/dependencies.py and the ownership check in
@@ -148,7 +159,46 @@ $$;
 
 
 -- ---------------------------------------------------------------------------
--- INDEXES
+-- NOTICE REACTIONS
+-- ---------------------------------------------------------------------------
+--
+-- One row per (notice, user, reaction_type). The unique constraint below is
+-- what makes a reaction togglable: clicking "like" again finds this exact
+-- row and deletes it instead of inserting a duplicate. A user CAN have
+-- multiple different reaction types active on the same notice (like AND
+-- heart), just not the same type twice.
+CREATE TABLE IF NOT EXISTS public.notice_reactions (
+    id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    notice_id     bigint      NOT NULL REFERENCES public.notices (id) ON DELETE CASCADE,
+    user_id       bigint      NOT NULL REFERENCES public.users (id)   ON DELETE CASCADE,
+    reaction_type text        NOT NULL,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT notice_reactions_type_valid
+        CHECK (reaction_type IN ('like', 'heart', 'laugh')),
+
+    -- This is what makes toggling work: one row per person per kind per
+    -- notice, so the backend can look for it and delete or insert.
+    CONSTRAINT notice_reactions_unique_per_user
+        UNIQUE (notice_id, user_id, reaction_type)
+);
+
+-- Needed so deleting a user does not scan the whole table to cascade.
+-- No index on notice_id: the unique constraint above already creates one
+-- with notice_id as its leading column, which the board's batch query uses.
+CREATE INDEX IF NOT EXISTS notice_reactions_user_id_idx
+    ON public.notice_reactions (user_id);
+
+ALTER TABLE public.notice_reactions ENABLE ROW LEVEL SECURITY;
+-- No policies, so anon and authenticated get nothing. The backend reaches it
+-- as service_role, and the frontend never talks to Supabase directly.
+
+-- Without this the next error is 42501, exactly as it was for users.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.notice_reactions TO service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- INDEXES (notices)
 -- ---------------------------------------------------------------------------
 --
 -- GET /notices sorts by created_at DESC, id DESC on every call. An index in
@@ -166,50 +216,7 @@ CREATE INDEX IF NOT EXISTS notices_user_id_idx
 
 
 -- ---------------------------------------------------------------------------
--- PRIVILEGES
--- ---------------------------------------------------------------------------
---
--- Give the backend's role access to the two tables.
---
--- This is separate from row level security and is checked first. RLS decides
--- which ROWS a role may see once it is allowed to touch the table at all.
--- A GRANT is what allows it to touch the table in the first place, and
--- without one Postgres refuses before any policy is considered:
---
---     permission denied for table users   (SQLSTATE 42501)
---
--- which is the error this section exists to fix. It is worth being clear
--- that service_role bypassing RLS does not imply it can reach the table:
--- those are two different mechanisms, and only the second one is automatic.
---
--- Supabase grants these automatically for tables created through the
--- dashboard's table editor, but not reliably for tables created by raw SQL
--- like this script, which is why both tables need naming here. On this
--- project notices had been granted to anon but not to service_role, so it
--- worked with the old key and stopped working with the new one.
---
--- GRANT is idempotent, so re-running this changes nothing.
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.notices TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.users   TO service_role;
-
--- No grant on users for anon or authenticated, deliberately.
---
--- That table holds bcrypt hashes, and the anon key is published in the
--- frontend bundle by design. The backend is the only thing that has any
--- business reading it, and it now connects as service_role.
---
--- If an error message ever suggests "GRANT SELECT ON public.users TO anon",
--- do not run it. It would make every hash readable by anyone who opens the
--- browser dev tools on the deployed site.
---
--- The sequences behind the id columns need no grant of their own. That is
--- specific to GENERATED AS IDENTITY, where the sequence is internal to the
--- table and INSERT covers it. A column declared with the older serial type
--- would have needed GRANT USAGE on its sequence as well.
-
-
--- ---------------------------------------------------------------------------
--- ROW LEVEL SECURITY
+-- ROW LEVEL SECURITY (users, notices)
 -- ---------------------------------------------------------------------------
 --
 -- A table created by raw SQL does not get RLS automatically. Supabase only
@@ -246,14 +253,37 @@ CREATE POLICY notices_select_anon
 -- straight to the table, which would make the authentication decorative.
 --
 -- Dropping them costs nothing, because the backend authenticates with the
--- service_role key and bypasses RLS entirely. It never needed these
--- policies. Only a direct caller does, and a direct caller is exactly what
--- should be refused.
+-- service_role key and bypasses RLS entirely, once it is also granted table
+-- access below. It never needed these policies. Only a direct caller does,
+-- and a direct caller is exactly what should be refused.
 --
--- users gets no policies at all, which is the strictest setting and the
--- right one. RLS with no policy denies anon and authenticated completely, so
--- the password hashes cannot be read with the public key under any query.
--- The backend still reads the table because service_role ignores RLS.
+-- users and notice_reactions get no policies at all, which is the strictest
+-- setting and the right one. RLS with no policy denies anon and
+-- authenticated completely, so password hashes and reaction data cannot be
+-- read with the public key under any query. The backend still reaches both
+-- because service_role ignores RLS.
+
+
+-- ---------------------------------------------------------------------------
+-- GRANTS
+-- ---------------------------------------------------------------------------
+--
+-- RLS and GRANT are two separate gates. RLS decides which ROWS a role sees.
+-- GRANT decides whether the role may touch the TABLE at all, and it is
+-- checked first. Nothing grants this automatically for tables created by
+-- raw SQL (Supabase only auto-grants for tables made through the dashboard's
+-- table editor).
+--
+-- service_role is what the backend now authenticates as. Without this
+-- block, every query from the backend fails with "permission denied for
+-- table ...", regardless of RLS or BYPASSRLS status, because it never gets
+-- past the GRANT check to have RLS evaluated at all.
+--
+-- Do NOT grant users or notice_reactions to anon. That would expose password
+-- hashes and let anyone forge reactions using someone else's key.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.notices           TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.users             TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.notice_reactions  TO service_role;
 
 
 -- ---------------------------------------------------------------------------
@@ -272,25 +302,19 @@ CREATE POLICY notices_select_anon
 --   WHERE table_schema = 'public' AND table_name = 'users'
 --   ORDER BY ordinal_position;
 --
--- Expect one policy on notices (select) and none on users.
+--   SELECT column_name, data_type, is_nullable
+--   FROM information_schema.columns
+--   WHERE table_schema = 'public' AND table_name = 'notice_reactions'
+--   ORDER BY ordinal_position;
+--
+-- Expect one policy on notices (select) and none on users or
+-- notice_reactions.
 --
 --   SELECT tablename, policyname, cmd FROM pg_policies
 --   WHERE schemaname = 'public';
 --
--- Confirm the grants landed. Expect four rows per table for service_role,
--- and NOTHING for anon on users.
---
---   SELECT grantee, table_name, privilege_type
---   FROM information_schema.role_table_grants
---   WHERE table_schema = 'public'
---     AND table_name IN ('users', 'notices')
---   ORDER BY table_name, grantee, privilege_type;
---
--- Confirm service_role really does skip row level security. This is what
--- lets the backend read a users table that has no policies at all. If
--- rolbypassrls came back false, every query would return zero rows instead
--- of an error, which looks like "the account does not exist" rather than
--- like a permissions problem, so it is worth checking explicitly.
+-- Confirm service_role actually bypasses RLS on this project (it normally
+-- does on Supabase, but this proves it rather than assumes it):
 --
 --   SELECT rolname, rolbypassrls FROM pg_roles
 --   WHERE rolname IN ('service_role', 'anon', 'authenticated');

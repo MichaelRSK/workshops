@@ -12,7 +12,11 @@ from app.db import get_client
 
 # get_current_user verifies the JWT and identifies who is calling.
 # CurrentUser is what it hands back once the check passes.
-from app.dependencies import CurrentUser, get_current_user
+from app.dependencies import (
+    CurrentUser,
+    get_current_user,
+    get_current_user_optional,
+)
 
 # The request and response shapes, kept in one place so the controller stays
 # about routing.
@@ -42,17 +46,31 @@ router = APIRouter(prefix="/notices", tags=["notices"])
 
 
 # GET /notices
-# Returns every notice, newest first.
+# Returns every notice, newest first, each with its reaction summary.
 #
-# Deliberately public, with no get_current_user dependency. It is a notice
-# board: the whole point is that the wall can be read without an account.
-# Posting and deleting are what need identity.
+# Still public, and now optionally authenticated, which are not the same
+# thing. get_current_user_optional never refuses a request: it identifies the
+# caller when it can and yields None when it cannot. It is a notice board,
+# so the wall can be read without an account, but knowing who is reading
+# means their own reactions can come back marked as theirs.
+#
+# So an anonymous viewer sees every notice and every count, with
+# my_reactions empty. A signed in viewer sees the same counts plus which of
+# them are their own.
 #
 # response_model on the decorator, rather than a return annotation alone, is
-# what makes FastAPI filter each row down to the five fields in NoticeOut.
+# what makes FastAPI filter each row down to the fields in NoticeOut.
 @router.get("", response_model=list[NoticeOut])
-def list_notices(client: Client = Depends(get_client)):
-    return notice_service.list_notices(client)
+def list_notices(
+    client: Client = Depends(get_client),
+    current_user: CurrentUser | None = Depends(get_current_user_optional),
+):
+    # The service takes an id or None rather than a CurrentUser, so it stays
+    # unaware of how callers are authenticated.
+    return notice_service.list_notices(
+        client,
+        current_user_id=current_user.user_id if current_user else None,
+    )
 
 
 # POST /notices

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Import the controllers that hold the routes. A controller is the top
 # layer: it defines the routes and calls down into a service, which is the
 # only layer that talks to Supabase.
-from app.controllers import auth_controller, notice_controller
+from app.controllers import auth_controller, notice_controller, reaction_controller
 
 # Create the FastAPI application.
 #
@@ -55,6 +55,11 @@ app.add_middleware(
 # added here.
 app.include_router(auth_controller.router)
 app.include_router(notice_controller.router)
+
+# The reaction router also sits under /notices. Its only path is
+# /{notice_id}/reactions, which cannot collide with the notice routes, so
+# registering it separately keeps the two concerns in their own files.
+app.include_router(reaction_controller.router)
 
 
 # GET /health

@@ -3,8 +3,14 @@
 from datetime import datetime
 
 # BaseModel defines the shape of a request or response body. Field attaches
-# the length rules below to individual fields.
+# the length rules below to individual fields, and supplies the default
+# factory for the reactions block.
 from pydantic import BaseModel, Field
+
+# How a notice's reactions are reported. Defined in its own module because
+# the reaction endpoints return it on its own, without a notice wrapped
+# around it.
+from app.models.reaction import ReactionSummary
 
 
 # The shape of the body POST /notices expects.
@@ -38,9 +44,18 @@ class NoticeCreate(BaseModel):
 # somebody else's id. It is returned so a frontend can work out which
 # notices belong to the signed-in user and show a delete button only on
 # those, which matches what the backend will actually allow.
+# reactions is filled in by the service, not read from the notices table.
+# There is no reactions column: it is counted from notice_reactions and
+# attached before the notice is returned.
+#
+# The default factory produces the all zeroes, nothing of mine summary. It
+# exists so that a code path which forgets to attach one still answers with a
+# valid, honest looking empty block rather than failing response validation
+# and turning a working list into a 500.
 class NoticeOut(BaseModel):
     id: int
     user_id: int
     name: str
     message: str
     created_at: datetime
+    reactions: ReactionSummary = Field(default_factory=ReactionSummary)

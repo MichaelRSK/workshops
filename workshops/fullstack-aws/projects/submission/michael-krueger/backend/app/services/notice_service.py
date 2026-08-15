@@ -5,6 +5,11 @@ from supabase import Client
 # The request model, used as the argument type on create_notice.
 from app.models.notice import NoticeCreate
 
+# Reactions live in their own table and their own service. This module asks
+# that one for the counts rather than querying notice_reactions itself, so
+# each service still owns exactly one table.
+from app.services import reaction_service
+
 # The table this service reads and writes. Named once so a rename is a
 # one-line change rather than a search across the file.
 TABLE = "notices"
@@ -62,7 +67,12 @@ class NoticeOwnershipError(Exception):
 # notices posted in the same instant would otherwise come back in whatever
 # order Postgres felt like, which makes the list jump around between
 # refreshes. Higher ids are newer, so this keeps the order stable.
-def list_notices(client: Client):
+#
+# current_user_id is who is asking, or None for an anonymous viewer. It only
+# affects the my_reactions part of each summary: the counts are the same for
+# everybody, so a signed out visitor sees how popular a notice is without
+# being told which reactions would be highlighted as theirs.
+def list_notices(client: Client, current_user_id=None):
     response = (
         client.table(TABLE)
         .select(COLUMNS)
@@ -74,7 +84,30 @@ def list_notices(client: Client):
     # supabase-py returns an object with the rows on .data. An empty board
     # is a perfectly normal answer, so an empty list is returned as is
     # rather than being treated as an error.
-    return response.data
+    notices = response.data or []
+
+    if not notices:
+        return notices
+
+    # One query for every notice on the page, not one per notice. See
+    # get_summaries_for_notices for why that matters.
+    summaries = reaction_service.get_summaries_for_notices(
+        client,
+        [notice["id"] for notice in notices],
+        current_user_id=current_user_id,
+    )
+
+    for notice in notices:
+        # The fallback should never be reached, since the summaries are keyed
+        # by the same ids that were just asked about. It is here so that a
+        # surprise produces a notice with no reactions rather than a
+        # KeyError that takes down the whole list.
+        notice["reactions"] = summaries.get(
+            notice["id"],
+            reaction_service.empty_summary(),
+        )
+
+    return notices
 
 
 # Finds a single notice by its id.
@@ -138,7 +171,15 @@ def create_notice(client: Client, notice: NoticeCreate, user_id: int):
     if not response.data:
         return None
 
-    return response.data[0]
+    created = response.data[0]
+
+    # A notice that has just been written cannot have any reactions, but
+    # NoticeOut still expects the block, so the empty one is attached here.
+    # Building it rather than querying for it saves a round trip whose answer
+    # is already known.
+    created["reactions"] = reaction_service.empty_summary()
+
+    return created
 
 
 # Deletes one notice, if the user asking owns it.

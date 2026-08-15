@@ -14,6 +14,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 import { deleteNotice } from "../api/notices";
 import { useAuth } from "../context/AuthContext";
+import ReactionBar from "./ReactionBar";
 
 // Turns the timestamp the backend sends into something readable.
 //
@@ -140,6 +141,22 @@ function NoticeCard({ notice, onDeleted }) {
             </Tooltip>
           )}
         </Stack>
+
+        {/* The reaction bar sits below the message and spans the card,
+            outside the Stack above so it is not squeezed into the same row
+            as the delete button.
+
+            reactions is passed straight through from the notice the board
+            fetched. ReactionBar keeps its own copy from then on, so a toggle
+            redraws only this notice rather than refetching the whole list.
+
+            The fallback covers a notice served by a backend from before
+            reactions existed, which would have no reactions field at all.
+            Without it the bar would read counts off undefined. */}
+        <ReactionBar
+          noticeId={notice.id}
+          reactions={notice.reactions || { counts: {}, my_reactions: [] }}
+        />
 
         {error && (
           <Alert severity="error" sx={{ mt: 2 }}>

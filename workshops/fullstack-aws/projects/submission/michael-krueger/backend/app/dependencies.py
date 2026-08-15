@@ -48,6 +48,20 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     client: Client = Depends(get_client),
 ):
+    return _authenticate(credentials, client)
+
+
+# The rules for turning credentials into a user, with no FastAPI wiring of
+# its own.
+#
+# Split out so that the strict and the optional dependency below share one
+# implementation. Two copies would drift, and the copy that drifted would be
+# the one deciding who is allowed in.
+#
+# Still raises HTTPException rather than returning None on failure, because
+# the specific reason is worth reporting when a route demands a token. The
+# optional wrapper throws that detail away deliberately.
+def _authenticate(credentials, client):
     # No Authorization header at all, or one that was not a Bearer header.
     if credentials is None:
         raise HTTPException(
@@ -106,3 +120,34 @@ def get_current_user(
         )
 
     return CurrentUser(user_id=user["id"], username=user["username"])
+
+
+# Like get_current_user, but hands back None instead of refusing the request
+# when there is no usable token.
+#
+# This is what lets GET /notices serve everybody. A signed in caller is
+# identified, so their own reactions come back highlighted, and a signed out
+# one still gets the notices and the counts. Without it the route would have
+# to choose between being public and knowing who is asking.
+#
+# A token that is present but bad, expired, forged, or pointing at a deleted
+# account, is treated exactly like no token at all. That is deliberate on a
+# route that does not require authentication: the reasonable answer is the
+# public view, not an error, since nothing on the page depended on the token
+# in the first place. A route that genuinely needs identity uses
+# get_current_user, where every one of those cases is a 401 with a reason.
+#
+# The consequence worth knowing: a frontend whose token quietly expires sees
+# the board keep working with its reactions no longer highlighted, rather
+# than being told. Posting or reacting is what surfaces the 401.
+def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    client: Client = Depends(get_client),
+):
+    if credentials is None:
+        return None
+
+    try:
+        return _authenticate(credentials, client)
+    except HTTPException:
+        return None
