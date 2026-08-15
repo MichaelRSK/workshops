@@ -1,0 +1,28 @@
+# Install everything in this file with:
+#   pip install -r requirements.txt
+
+# The web framework itself.
+fastapi>=0.115.0
+
+# The server that actually runs the app. The [standard] extra pulls in
+# uvloop, httptools and websockets, which is what makes the --reload flag
+# in the run command work properly.
+uvicorn[standard]>=0.30.0
+
+# The Supabase client. This talks to the project's REST API over HTTPS, so
+# it is the only database dependency needed here.
+#
+# Chosen over SQLAlchemy on purpose. An ORM earns its keep when there are
+# models, relationships and migrations to manage. This project has one
+# table, created once by schema.sql, so an ORM plus a driver plus Alembic
+# would be three more dependencies buying nothing.
+supabase>=2.10.0
+
+# Validates and shapes the request and response bodies in app/schemas.py.
+# FastAPI depends on it already, but it is listed because our own code
+# imports it directly, and a dependency you import is one you should name.
+pydantic>=2.9.0
+
+# Reads SUPABASE_URL and SUPABASE_KEY out of the .env file so the key stays
+# out of the source code.
+python-dotenv>=1.0.0
