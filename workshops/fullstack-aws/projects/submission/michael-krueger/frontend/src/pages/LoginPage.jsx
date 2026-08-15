@@ -83,7 +83,26 @@ function LoginPage() {
   return (
     <Container maxWidth="xs" sx={{ py: 6 }}>
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h5" component="h1" gutterBottom>
+        {/* The welcome block. Someone arriving at a bare login form has no
+            way of knowing what they are logging in to, and this is the
+            first page a logged out visitor sees, because ProtectedRoute
+            sends them here from the board.
+
+            This carries the h1 now, and "Log in" below has become the h2.
+            A page has one top level heading, and on this page it is what
+            the page is about rather than what the form does. */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h5" component="h1" gutterBottom>
+            Welcome to Notice Board
+          </Typography>
+
+          <Typography variant="body2" color="text.secondary">
+            Read what everyone has posted, and log in to add a notice of your
+            own.
+          </Typography>
+        </Box>
+
+        <Typography variant="h6" component="h2" gutterBottom>
           Log in
         </Typography>
 
